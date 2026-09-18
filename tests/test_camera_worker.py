@@ -84,6 +84,19 @@ def test_connect_emits_connected_with_dimensions(worker):
     assert event.payload["is_color"] is True
 
 
+def test_connect_zwo_accepts_legacy_real_kind(worker):
+    worker.connect("real", mock_seed=1)
+    event = _wait_for(worker, "connect_error", timeout=3.0)
+    assert "ASI" in event.payload["message"] or "SDK" in event.payload["message"]
+
+
+def test_connect_svbony_reports_not_implemented(worker):
+    worker.connect("svbony")
+    event = _wait_for(worker, "connect_error")
+    assert "SVBONY" in event.payload["message"]
+    assert "not implemented" in event.payload["message"].lower()
+
+
 def test_preview_frames_arrive_after_connect(worker):
     worker.connect("mock", mock_seed=1)
     _wait_for(worker, "connected")

@@ -21,6 +21,7 @@ import numpy as np
 
 from camera.asi_camera import AsiCamera
 from camera.fits_writer import write_fits
+from camera.kinds import CAMERA_KIND_QHY, CAMERA_KIND_SVBONY, CAMERA_KIND_ZWO, is_mock_camera_kind, normalize_camera_kind
 from camera.mock_camera import MockAsiCamera
 from camera.ser_writer import SerWriter
 
@@ -454,17 +455,26 @@ class CameraWorker:
     # -- command handlers -----------------------------------------------------
 
     def _handle_connect(self, payload: dict) -> None:
-        kind = payload["kind"]
+        kind = normalize_camera_kind(payload["kind"])
         bit_depth = payload.get("bit_depth", 8)
-        if kind == "mock":
+        if is_mock_camera_kind(kind):
             mock_kwargs = {"seed": payload.get("mock_seed"), "bit_depth": bit_depth}
             if payload.get("plate_scale_arcsec_per_px") is not None:
                 mock_kwargs["plate_scale_arcsec_per_px"] = payload["plate_scale_arcsec_per_px"]
             mock_kwargs["sensor_width"] = payload.get("mock_sensor_width", 640)
             mock_kwargs["sensor_height"] = payload.get("mock_sensor_height", 480)
             camera = MockAsiCamera(**mock_kwargs)
-        else:
+        elif kind == CAMERA_KIND_ZWO:
             camera = AsiCamera(payload["camera_id"], payload.get("sdk_path"), bit_depth=bit_depth)
+        elif kind == CAMERA_KIND_SVBONY:
+            self._emit("connect_error", message="SVBONY camera support is not implemented yet")
+            return
+        elif kind == CAMERA_KIND_QHY:
+            self._emit("connect_error", message="QHY camera support is not implemented yet")
+            return
+        else:
+            self._emit("connect_error", message=f"Unknown camera kind: {payload['kind']!r}")
+            return
         try:
             camera.open()
         except Exception as exc:  # noqa: BLE001

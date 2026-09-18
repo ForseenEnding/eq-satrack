@@ -2907,6 +2907,21 @@ def test_calibration_panel_clock_sync_poll_reports_unknown_status(calibration_pa
     assert "no tool available" in p._clock_sync_var.get()
 
 
+def test_connection_panel_camera_type_dropdown_lists_all_brands():
+    root = tk.Tk()
+    root.withdraw()
+    mount_worker = MountWorker()
+    camera_worker = CameraWorker()
+    try:
+        p = ConnectionPanel(root, mount_worker, camera_worker, lambda _connected: None, map_widget_cls=_StubMapWidget)
+        assert tuple(p._camera_kind_combo["values"]) == ("Mock", "ZWO (ASI)", "SVBONY", "QHY")
+        assert p._camera_kind_var.get() == "mock"
+    finally:
+        mount_worker.shutdown()
+        camera_worker.shutdown()
+        root.destroy()
+
+
 def test_camera_connect_uses_the_real_configured_plate_scale():
     # Camera connection lives in ConnectionPanel (moved there so both
     # devices are wired up from one tab), not TransitPanel. get_optical_train
@@ -2921,7 +2936,7 @@ def test_camera_connect_uses_the_real_configured_plate_scale():
     try:
         train = OpticalTrain(aperture_mm=200, focal_length_mm=1000, barlow_multiplier=2.0, pixel_size_um=2.9)
         p = ConnectionPanel(root, mount_worker, camera_worker, lambda _connected: None, get_optical_train=lambda: train, map_widget_cls=_StubMapWidget)
-        p._camera_kind_var.set("real")
+        p._camera_kind_var.set("zwo")
         captured = {}
         p._camera_worker.connect = lambda *args, **kwargs: captured.update(kwargs, kind=args[0])
         p._on_camera_connect_click()
@@ -2941,7 +2956,7 @@ def test_camera_connect_falls_back_to_default_plate_scale_when_fields_invalid():
     camera_worker = CameraWorker()
     try:
         p = ConnectionPanel(root, mount_worker, camera_worker, lambda _connected: None, get_optical_train=lambda: None, map_widget_cls=_StubMapWidget)
-        p._camera_kind_var.set("real")
+        p._camera_kind_var.set("zwo")
         captured = {}
         p._camera_worker.connect = lambda *args, **kwargs: captured.update(kwargs, kind=args[0])
         p._on_camera_connect_click()
@@ -3106,7 +3121,7 @@ def test_real_finder_connect_also_pushes_the_real_plate_scale():
             map_widget_cls=_StubMapWidget, finder_worker=finder_worker, finder_state=finder_state,
         )
         p._finder_worker.connect = lambda *args, **kwargs: None
-        p._finder_kind_var.set("real")
+        p._finder_kind_var.set("zwo")
         p._on_finder_connect_click()
         expected_finder_scale = ConnectionPanel._plate_scale_arcsec_per_px(
             ConnectionPanel.FINDER_DEFAULT_FOCAL_MM, ConnectionPanel.FINDER_DEFAULT_PIXEL_UM,
@@ -3135,7 +3150,7 @@ def test_finder_focal_and_pixel_fields_stay_editable_in_real_mode():
             root, mount_worker, camera_worker, lambda _connected: None,
             map_widget_cls=_StubMapWidget, finder_worker=finder_worker,
         )
-        p._finder_kind_var.set("real")
+        p._finder_kind_var.set("zwo")
         p._update_mock_optics_state("finder")
         for widget in p._finder_optics_always_editable_widgets:
             assert str(widget["state"]) == "normal"

@@ -67,6 +67,13 @@ from am5.gui.theme import PALETTE, style_axes
 from am5.gui.worker import MountWorker, WorkerEvent
 from am5.tracker import AxisSigns, LiveOffsets, TrackingConfig, decompose_error
 from camera.finder import MAX_FINDER_EXPOSURE_US, FinderState, downsample_for_display
+from camera.kinds import (
+    CAMERA_KIND_MOCK,
+    CONNECTION_CAMERA_KIND_LABELS,
+    KIND_TO_CONNECTION_LABEL,
+    LABEL_TO_CAMERA_KIND,
+    is_mock_camera_kind,
+)
 from camera.fits_writer import write_fits
 from camera.guiding import BlobDetection, GuidingCalibration, calibrate_from_nudges, detect_brightest_blob, measure_frame_shift
 from camera.platesolve import AstrometryNetSolver, PlateSolver
@@ -368,6 +375,28 @@ class ConnectionPanel(ttk.Frame):
     def _plate_scale_arcsec_per_px(focal_length_mm: float, pixel_size_um: float) -> float:
         return 206265.0 * pixel_size_um / (1000.0 * focal_length_mm)
 
+    @staticmethod
+    def _add_camera_kind_combobox(
+        parent: tk.Misc, row: int, kind_var: tk.StringVar, on_kind_change: Callable[[], None],
+    ) -> ttk.Combobox:
+        label_var = tk.StringVar(value=KIND_TO_CONNECTION_LABEL.get(kind_var.get(), "Mock"))
+        combo = ttk.Combobox(
+            parent, textvariable=label_var, values=CONNECTION_CAMERA_KIND_LABELS,
+            state="readonly", width=16,
+        )
+        combo.grid(row=row, column=0, columnspan=2, sticky="w")
+
+        def _on_selected(_event: object | None = None) -> None:
+            selected = label_var.get()
+            kind = LABEL_TO_CAMERA_KIND.get(selected)
+            if kind is None:
+                return
+            kind_var.set(kind)
+            on_kind_change()
+
+        combo.bind("<<ComboboxSelected>>", _on_selected)
+        return combo
+
     def __init__(
         self, parent: tk.Misc, mount_worker: MountWorker, camera_worker: CameraWorker,
         on_connection_change: Callable[[bool], None],
@@ -450,84 +479,76 @@ class ConnectionPanel(ttk.Frame):
 
         self._update_address_state()
 
-        camera_frame = ttk.LabelFrame(left, text="Camera (ASI290MC, main tube)", padding=8)
+        camera_frame = ttk.LabelFrame(left, text="Main camera", padding=8)
         camera_frame.pack(fill="x", anchor="n", pady=(10, 0))
 
-        self._camera_kind_var = tk.StringVar(value="mock")
-        ttk.Radiobutton(
-            camera_frame, text="Mock", variable=self._camera_kind_var, value="mock",
-            command=lambda: self._update_mock_optics_state("main"),
-        ).grid(row=0, column=0, sticky="w")
-        ttk.Radiobutton(
-            camera_frame, text="Real ASI camera", variable=self._camera_kind_var, value="real",
-            command=lambda: self._update_mock_optics_state("main"),
-        ).grid(row=0, column=1, sticky="w")
-        ttk.Label(camera_frame, text="camera id").grid(row=1, column=0, sticky="w")
+        self._camera_kind_var = tk.StringVar(value=CAMERA_KIND_MOCK)
+        ttk.Label(camera_frame, text="camera type").grid(row=0, column=0, sticky="w")
+        self._camera_kind_combo = self._add_camera_kind_combobox(
+            camera_frame, row=1, kind_var=self._camera_kind_var,
+            on_kind_change=lambda: self._update_mock_optics_state("main"),
+        )
+        ttk.Label(camera_frame, text="camera id").grid(row=2, column=0, sticky="w")
         self._camera_id_var = tk.StringVar(value="0")
-        ttk.Entry(camera_frame, textvariable=self._camera_id_var, width=6).grid(row=1, column=1, sticky="w")
+        ttk.Entry(camera_frame, textvariable=self._camera_id_var, width=6).grid(row=2, column=1, sticky="w")
 
         (
             self._main_focal_var, self._main_sensor_w_var, self._main_sensor_h_var,
             self._main_pixel_var, self._main_scale_label_var,
         ) = self._build_mock_optics_rows(
-            camera_frame, start_row=2, prefix="main",
+            camera_frame, start_row=3, prefix="main",
             focal_mm=self.MAIN_DEFAULT_FOCAL_MM, sensor_w=self.MAIN_DEFAULT_SENSOR_W,
             sensor_h=self.MAIN_DEFAULT_SENSOR_H, pixel_um=self.MAIN_DEFAULT_PIXEL_UM,
         )
 
         self._camera_connect_button = ttk.Button(camera_frame, text="Connect", command=self._on_camera_connect_click)
-        self._camera_connect_button.grid(row=7, column=0, pady=(6, 0))
+        self._camera_connect_button.grid(row=8, column=0, pady=(6, 0))
         self._camera_disconnect_button = ttk.Button(
             camera_frame, text="Disconnect", command=self._camera_worker.disconnect, state="disabled",
         )
-        self._camera_disconnect_button.grid(row=7, column=1, pady=(6, 0))
+        self._camera_disconnect_button.grid(row=8, column=1, pady=(6, 0))
         self._camera_status_var = tk.StringVar(value="Not connected")
-        ttk.Label(camera_frame, textvariable=self._camera_status_var).grid(row=8, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        ttk.Label(camera_frame, textvariable=self._camera_status_var).grid(row=9, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self._update_mock_optics_state("main")
 
         # Finder scope camera -- entirely optional, greyed out if no
         # finder_worker was passed in (e.g. tests, or a build without the
         # finder feature wired up).
-        finder_frame = ttk.LabelFrame(left, text="Finder camera (ASI678MM, optional)", padding=8)
+        finder_frame = ttk.LabelFrame(left, text="Finder camera (optional)", padding=8)
         finder_frame.pack(fill="x", anchor="n", pady=(10, 0))
-        self._finder_kind_var = tk.StringVar(value="mock")
-        finder_mock_radio = ttk.Radiobutton(
-            finder_frame, text="Mock", variable=self._finder_kind_var, value="mock",
-            command=lambda: self._update_mock_optics_state("finder"),
+        self._finder_kind_var = tk.StringVar(value=CAMERA_KIND_MOCK)
+        ttk.Label(finder_frame, text="camera type").grid(row=0, column=0, sticky="w")
+        self._finder_kind_combo = self._add_camera_kind_combobox(
+            finder_frame, row=1, kind_var=self._finder_kind_var,
+            on_kind_change=lambda: self._update_mock_optics_state("finder"),
         )
-        finder_mock_radio.grid(row=0, column=0, sticky="w")
-        finder_real_radio = ttk.Radiobutton(
-            finder_frame, text="Real ASI camera", variable=self._finder_kind_var, value="real",
-            command=lambda: self._update_mock_optics_state("finder"),
-        )
-        finder_real_radio.grid(row=0, column=1, sticky="w")
-        ttk.Label(finder_frame, text="camera id").grid(row=1, column=0, sticky="w")
+        ttk.Label(finder_frame, text="camera id").grid(row=2, column=0, sticky="w")
         self._finder_id_var = tk.StringVar(value="1")
         finder_id_entry = ttk.Entry(finder_frame, textvariable=self._finder_id_var, width=6)
-        finder_id_entry.grid(row=1, column=1, sticky="w")
+        finder_id_entry.grid(row=2, column=1, sticky="w")
 
         (
             self._finder_focal_var, self._finder_sensor_w_var, self._finder_sensor_h_var,
             self._finder_pixel_var, self._finder_scale_label_var,
         ) = self._build_mock_optics_rows(
-            finder_frame, start_row=2, prefix="finder",
+            finder_frame, start_row=3, prefix="finder",
             focal_mm=self.FINDER_DEFAULT_FOCAL_MM, sensor_w=self.FINDER_DEFAULT_SENSOR_W,
             sensor_h=self.FINDER_DEFAULT_SENSOR_H, pixel_um=self.FINDER_DEFAULT_PIXEL_UM,
             focal_pixel_always_editable=True,
         )
 
         self._finder_connect_button = ttk.Button(finder_frame, text="Connect", command=self._on_finder_connect_click)
-        self._finder_connect_button.grid(row=7, column=0, pady=(6, 0))
+        self._finder_connect_button.grid(row=8, column=0, pady=(6, 0))
         self._finder_disconnect_button = ttk.Button(
             finder_frame, text="Disconnect",
             command=self._finder_worker.disconnect if self._finder_worker is not None else (lambda: None),
             state="disabled",
         )
-        self._finder_disconnect_button.grid(row=7, column=1, pady=(6, 0))
+        self._finder_disconnect_button.grid(row=8, column=1, pady=(6, 0))
         self._finder_status_var = tk.StringVar(value="Not connected")
-        ttk.Label(finder_frame, textvariable=self._finder_status_var).grid(row=8, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        ttk.Label(finder_frame, textvariable=self._finder_status_var).grid(row=9, column=0, columnspan=2, sticky="w", pady=(4, 0))
         if self._finder_worker is None:
-            for w in (finder_mock_radio, finder_real_radio, finder_id_entry, self._finder_connect_button):
+            for w in (self._finder_kind_combo, finder_id_entry, self._finder_connect_button):
                 w.configure(state="disabled")
             self._finder_status_var.set("Not available (no finder worker configured)")
         self._update_mock_optics_state("finder")
@@ -642,7 +663,7 @@ class ConnectionPanel(ttk.Frame):
         editable param) for `which` ("main" or "finder") unless that
         device's kind var is set to Mock."""
         kind_var = self._camera_kind_var if which == "main" else self._finder_kind_var
-        is_mock = kind_var.get() == "mock"
+        is_mock = is_mock_camera_kind(kind_var.get())
         widgets = getattr(self, f"_{which}_optics_widgets", [])
         for w in widgets:
             w.configure(state="normal" if is_mock else "disabled")
@@ -748,7 +769,7 @@ class ConnectionPanel(ttk.Frame):
         self._camera_connect_button.configure(state="disabled")
         self._camera_status_var.set("Connecting...")
         kind = self._camera_kind_var.get()
-        if kind == "mock":
+        if is_mock_camera_kind(kind):
             # Mock mode: this panel's own focal/sensor/pixel fields are the
             # single source of truth -- NOT the Exposure calc tab's optical
             # train, which models a hypothetical setup for exposure planning
@@ -811,7 +832,7 @@ class ConnectionPanel(ttk.Frame):
         self._finder_connect_button.configure(state="disabled")
         self._finder_status_var.set("Connecting...")
         kind = self._finder_kind_var.get()
-        if kind == "mock":
+        if is_mock_camera_kind(kind):
             try:
                 focal_mm = float(self._finder_focal_var.get())
                 sensor_w = int(float(self._finder_sensor_w_var.get()))
