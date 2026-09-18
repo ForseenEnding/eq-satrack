@@ -90,9 +90,13 @@ poetry install
 poetry run python3 gui.py   # or: poetry shell, then run scripts directly
 ```
 
-Real camera support additionally needs the ZWO ASI SDK
-(`libASICamera2.so`) installed and discoverable — the GUI and camera mock
-work fine without it, this is only needed to talk to real ASI hardware.
+Real camera support additionally needs the vendor SDK installed and
+discoverable — the GUI and camera mock work fine without it:
+
+- **ZWO ASI** — `libASICamera2.so` (or Windows ASI SDK) on your system path.
+- **QHY** — this repo bundles the Windows x64 SDK under `sdk/qhy/x64/`
+  (`qhyccd.dll` + `qhyccd.ini`); on Linux, install `libqhyccd.so` or pass
+  an explicit SDK path in the Connection tab.
 
 ### Star catalog
 

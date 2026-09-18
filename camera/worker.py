@@ -20,6 +20,7 @@ from typing import Any, Callable
 import numpy as np
 
 from camera.asi_camera import AsiCamera
+from camera.qhy_camera import QhyCamera
 from camera.fits_writer import write_fits
 from camera.kinds import CAMERA_KIND_QHY, CAMERA_KIND_SVBONY, CAMERA_KIND_ZWO, is_mock_camera_kind, normalize_camera_kind
 from camera.mock_camera import MockAsiCamera
@@ -470,8 +471,7 @@ class CameraWorker:
             self._emit("connect_error", message="SVBONY camera support is not implemented yet")
             return
         elif kind == CAMERA_KIND_QHY:
-            self._emit("connect_error", message="QHY camera support is not implemented yet")
-            return
+            camera = QhyCamera(payload["camera_id"], payload.get("sdk_path"), bit_depth=bit_depth)
         else:
             self._emit("connect_error", message=f"Unknown camera kind: {payload['kind']!r}")
             return

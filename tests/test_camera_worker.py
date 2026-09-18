@@ -97,6 +97,19 @@ def test_connect_svbony_reports_not_implemented(worker):
     assert "not implemented" in event.payload["message"].lower()
 
 
+def test_connect_qhy_without_hardware_reports_sdk_or_camera_error(worker):
+    worker.connect("qhy", camera_id=0)
+    event = _wait_for(worker, "connect_error", timeout=5.0)
+    message = event.payload["message"]
+    lowered = message.lower()
+    assert (
+        "qhy" in lowered
+        or "camera" in lowered
+        or "sdk" in lowered
+        or "qhyccd" in lowered
+    ), message
+
+
 def test_preview_frames_arrive_after_connect(worker):
     worker.connect("mock", mock_seed=1)
     _wait_for(worker, "connected")
