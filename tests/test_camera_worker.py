@@ -90,16 +90,39 @@ def test_connect_zwo_accepts_legacy_real_kind(worker):
     assert "ASI" in event.payload["message"] or "SDK" in event.payload["message"]
 
 
-def test_connect_svbony_reports_not_implemented(worker):
-    worker.connect("svbony")
-    event = _wait_for(worker, "connect_error")
-    assert "SVBONY" in event.payload["message"]
-    assert "not implemented" in event.payload["message"].lower()
+def _wait_for_connect_or_error(worker: CameraWorker, timeout: float = 5.0) -> CameraEvent:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            event = worker.events.get(timeout=0.1)
+        except queue.Empty:
+            continue
+        if event.kind in ("connected", "connect_error"):
+            return event
+    raise AssertionError(f"never saw connected/connect_error within {timeout}s")
+
+
+def test_connect_svbony_without_hardware_reports_sdk_or_camera_error(worker):
+    worker.connect("svbony", camera_id=0)
+    event = _wait_for_connect_or_error(worker, timeout=5.0)
+    if event.kind == "connected":
+        pytest.skip("SVBONY hardware present — connect succeeded")
+    message = event.payload["message"]
+    lowered = message.lower()
+    assert (
+        "svbony" in lowered
+        or "svb" in lowered
+        or "camera" in lowered
+        or "sdk" in lowered
+    ), message
+    assert "not implemented" not in lowered
 
 
 def test_connect_qhy_without_hardware_reports_sdk_or_camera_error(worker):
     worker.connect("qhy", camera_id=0)
-    event = _wait_for(worker, "connect_error", timeout=5.0)
+    event = _wait_for_connect_or_error(worker, timeout=5.0)
+    if event.kind == "connected":
+        pytest.skip("QHY hardware present — connect succeeded")
     message = event.payload["message"]
     lowered = message.lower()
     assert (

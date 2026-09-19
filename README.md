@@ -97,6 +97,9 @@ discoverable — the GUI and camera mock work fine without it:
 - **QHY** — this repo bundles the Windows x64 SDK under `sdk/qhy/x64/`
   (`qhyccd.dll` + `qhyccd.ini`); on Linux, install `libqhyccd.so` or pass
   an explicit SDK path in the Connection tab.
+- **SVBONY** — bundled Windows SDK under `sdk/svbony/lib/x64/`
+  (`SVBCameraSDK.dll`); on Linux, install `libSVBCameraSDK.so` or pass an
+  explicit SDK path in the Connection tab.
 
 ### Star catalog
 
